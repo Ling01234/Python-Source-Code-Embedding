@@ -1,14 +1,7 @@
 # Ideas
-- **Text summarization and information retrieval**: summarize news articles, research papers, and test out different summarization techniques.
-- be specific in text summarization so that we can have only 1 dataset
-
-## Examples
-- summarization articles on natural disasters
-- volcanoes
-- tsunami
-- storms
+- **Code embeddings**: understand code and describe the functionality of code in english. IF we have time, we can elaborate this into whole scripts, where functions are dependent of each other.
 -
 
 ## helpful links
-- https://huggingface.co/models?pipeline_tag=summarization
+- https://www.educative.io/answers/how-to-generate-code-embeddings-with-openais-api-in-python
 -
