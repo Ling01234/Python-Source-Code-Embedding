@@ -5,29 +5,45 @@ from lib2to3 import refactor
 import re
 
 
+import ast
+import builtins
+
 class CodeCleaner(ast.NodeTransformer):
     def __init__(self):
         self.var_counter = 1
         self.func_counter = 1
         self.name_mapping = {}
+        self.imported_modules = set()
+        self.builtin_names = dir(builtins)
+
+    def visit_Import(self, node):
+        for alias in node.names:
+            self.imported_modules.add(alias.name)
+        return node
+
+    def visit_ImportFrom(self, node):
+        self.imported_modules.add(node.module)
+        return node
 
     def visit_Name(self, node):
-        if isinstance(node.ctx, ast.Load) or isinstance(node.ctx, ast.Store):
-            if node.id not in self.name_mapping:
+        if isinstance(node.ctx, (ast.Load, ast.Store)) and node.id not in self.builtin_names:
+            if node.id not in self.name_mapping and node.id not in self.imported_modules:
                 self.name_mapping[node.id] = f'var{self.var_counter}'
                 self.var_counter += 1
-            new_name = self.name_mapping[node.id]
+            new_name = self.name_mapping.get(node.id, node.id)
         else:
-            new_name = node.id  # For other contexts, keep the original name
+            new_name = node.id
         return ast.copy_location(ast.Name(id=new_name, ctx=node.ctx), node)
 
     def visit_FunctionDef(self, node):
-        original_name = node.name
-        node.name = f'func{self.func_counter}'
-        self.func_counter += 1
-        self.name_mapping[original_name] = node.name
-        self.generic_visit(node)  # update names inside the function
+        if node.name not in self.builtin_names:
+            original_name = node.name
+            node.name = f'func{self.func_counter}'
+            self.func_counter += 1
+            self.name_mapping[original_name] = node.name
+        self.generic_visit(node)
         return node
+
 
 def convert_python2_to_python3(code):
     tool = refactor.RefactoringTool(refactor.get_fixers_from_package('lib2to3.fixes'))
@@ -57,27 +73,6 @@ def clean_code(code):
         return None, None, {}
     return cleaned_code, comments, cleaner.name_mapping
 
-
-# def extract_and_remove_comments(code):
-#     modified_code_lines = []
-#     comments = []
-#     try:
-#         tokens = tokenize.generate_tokens(StringIO(code).readline)
-#         last_lineno = 1
-#         for tok in tokens:
-#             if tok.type == tokenize.COMMENT:
-#                 comments.append(tok.string)
-#             else:
-#                 # Add lines that were skipped before this token
-#                 while last_lineno < tok.start[0]:
-#                     modified_code_lines.append("\n")
-#                     last_lineno += 1
-#                 modified_code_lines.append(tok.string)
-#             last_lineno = tok.end[0]
-#     except Exception:
-#         return None, None
-#     return ' '.join(comments), ''.join(modified_code_lines)
-
 def extract_and_remove_comments(code):
     comments = re.findall(r'(?m)^\s*#.*$', code)
 
@@ -88,31 +83,36 @@ def extract_and_remove_comments(code):
     return ' '.join(comments), code_without_comments
 
 def process_dataset_item(code):
-    cleaned_code, comments, name_mapping = clean_code(code)
-    if cleaned_code is None:
-        return None 
+    comments, code_without_comments = extract_and_remove_comments(code)
+    if not comments and not code_without_comments:
+        return None
 
     try:
-        original_tree = ast.parse(code)
+        original_tree = ast.parse(code_without_comments)
         serializable_original_tree = ast.dump(original_tree)
     except SyntaxError:
-        print('did not work')
+        print('Syntax error in original code')
+        return None
+
+    cleaned_code, _, name_mapping = clean_code(code_without_comments)
+    if cleaned_code is None:
         return None
 
     try:
         cleaned_tree = ast.parse(cleaned_code)
         serializable_cleaned_tree = ast.dump(cleaned_tree)
     except SyntaxError:
-        print('did not work')
+        print('Syntax error in cleaned code')
         return None
 
     return {
-        'original_code': code,
+        'original_code': code_without_comments,
         'cleaned_code': cleaned_code,
         'original_tree': serializable_original_tree,
         'cleaned_tree': serializable_cleaned_tree,
         'description': comments
     }
+
 
 def process_chunk(chunk):
     processed_items = [process_dataset_item(code) for code in chunk['content']]
@@ -130,6 +130,8 @@ def create_dataset():
 
     processed_data = [item for sublist in results for item in sublist]
     breakpoint()
+
+    return processed_data
 
 if __name__ == "__main__":
     create_dataset()
