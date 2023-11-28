@@ -1,6 +1,11 @@
 # Initial README
 Add description
 
+# Code Cloning and Code2Vec
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+Project Description 
+
 # Links
 **📖 [Documentation]**
 &ensp;|&ensp;
