@@ -3,10 +3,104 @@ from multiprocessing import Pool, cpu_count
 import ast
 from lib2to3 import refactor
 import re
-
-
 import ast
 import builtins
+
+class PathConstructor:
+    def __init__(self):
+        self.terminal_nodes = []
+        self.path_contexts = []
+
+    def is_terminal(self, node):
+        return not any(isinstance(child, ast.AST) for child in ast.iter_child_nodes(node))
+
+    def find_terminal_nodes(self, node):
+        if self.is_terminal(node):
+            if not isinstance(node, ast.alias):
+                self.terminal_nodes.append(node)
+        else:
+            for child in ast.iter_child_nodes(node):
+                self.find_terminal_nodes(child)
+
+    def get_parent_map(self, node, parent=None, parent_map=None):
+        if parent_map is None:
+            parent_map = {}
+        parent_map[node] = parent
+        for child in ast.iter_child_nodes(node):
+            self.get_parent_map(child, node, parent_map)
+        return parent_map
+
+    def find_lowest_common_ancestor(self, node1, node2, parent_map):
+        ancestors = set()
+        while node1:
+            ancestors.add(node1)
+            node1 = parent_map[node1]
+        while node2 not in ancestors:
+            node2 = parent_map[node2]
+        return node2
+
+    def construct_path(self, start, end, parent_map):
+        lca = self.find_lowest_common_ancestor(start, end, parent_map)
+
+        path = []
+        # Trace path from start to LCA
+        node = start
+        while node != lca:
+            path.append(self.get_node_label(node) + '↑')
+            node = parent_map[node]
+        
+        # Trace path from LCA to end
+        node = end
+        while node != lca:
+            path.append(self.get_node_label(node) + '↓')
+            node = parent_map[node]
+
+        path_str = ' '.join(path)
+        return path_str
+
+
+    def generate_path_contexts(self, ast_tree):
+        parent_map = self.get_parent_map(ast_tree)
+        self.find_terminal_nodes(ast_tree)
+        for i, start in enumerate(self.terminal_nodes):
+            for end in self.terminal_nodes[i + 1:]:
+                path = self.construct_path(start, end, parent_map)
+                if path != '':
+                    self.path_contexts.append((self.get_node_label(start), path, self.get_node_label(end)))
+        return self.path_contexts
+
+    # def get_node_label(self, node):
+    #     # breakpoint()
+    #     if isinstance(node, ast.Name):
+    #         return node.id  # Variable name
+    #     elif isinstance(node, ast.Expr):
+    #         return node.id
+    #     elif isinstance(node, ast.Constant):
+    #         return str(node.value)  # Constant value
+    #     elif isinstance(node, ast.FunctionDef):
+    #         return node.name  # Function name
+    #     elif isinstance(node, ast.arg):
+    #         return node.arg  # Function argument name
+    #     else:
+    #         return type(node).name  # Fallback to node type
+
+    def get_node_label(self, node):
+        # Check if the node is a terminal node and return the value
+        if isinstance(node, (ast.Name, ast.Constant, ast.FunctionDef, ast.arg, ast.Expr)):
+            if hasattr(node, 'id'):
+                return node.id
+            elif hasattr(node, 'value'):
+                return str(node.value)
+            elif hasattr(node, 'name'):
+                return node.name
+            elif hasattr(node, 'arg'):
+                return node.arg
+            else:
+                # This will handle ast.Expr and other terminal nodes
+                return type(node).__name__
+        else:
+            return type(node).__name__  # Fallback to node type
+
 
 class CodeCleaner(ast.NodeTransformer):
     def __init__(self):
@@ -66,6 +160,12 @@ def clean_code(code):
             return None, None, {}
     cleaner = CodeCleaner()
     tree = cleaner.visit(tree)
+
+    # # testing out path creating system
+    # path_constructor = PathConstructor()
+    # paths = path_constructor.generate_path_contexts(tree)
+
+    # breakpoint()
     try:
         cleaned_code = ast.unparse(tree)  # Return the source as a string
     except SyntaxError as e:
@@ -106,11 +206,11 @@ def process_dataset_item(code):
         return None
 
     return {
-        'original_code': code_without_comments,
-        'cleaned_code': cleaned_code,
+        'original_code': code_without_comments.strip(),
+        'cleaned_code': cleaned_code.strip(),
         'original_tree': serializable_original_tree,
         'cleaned_tree': serializable_cleaned_tree,
-        'description': comments
+        'description': comments.strip()
     }
 
 
@@ -121,7 +221,7 @@ def process_chunk(chunk):
 def create_dataset():
     dataset = load_dataset("bigcode/the-stack-smol", data_dir="data/python")
     num_processes = cpu_count()
-    # num_processes = 1 # for testing
+    # num_processes = 1 # for testing with 1 core
     chunk_size = len(dataset['train']) // num_processes
     chunks = [dataset['train'][i:i + chunk_size] for i in range(0, len(dataset['train']), chunk_size)]
 
@@ -133,5 +233,22 @@ def create_dataset():
 
     return processed_data
 
+def create_dataset_for_testing():
+    dataset = load_dataset("bigcode/the-stack-smol", data_dir="data/python")
+    processed_data = []
+
+    for code in dataset['train']:
+        processed_item = process_dataset_item(code['content'])
+        if processed_item:
+            processed_data.append(processed_item)
+    
+    breakpoint()
+
+    return processed_data
+
 if __name__ == "__main__":
-    create_dataset()
+    testing = False
+    if testing:
+        create_dataset_for_testing()
+    else:
+        create_dataset()
