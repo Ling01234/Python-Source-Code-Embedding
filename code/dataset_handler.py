@@ -5,6 +5,9 @@ from lib2to3 import refactor
 import re
 import ast
 import builtins
+import pickle
+from tqdm import tqdm
+
 
 class PathConstructor:
     def __init__(self):
@@ -48,7 +51,7 @@ class PathConstructor:
         while node != lca:
             path.append(self.get_node_label(node) + '↑')
             node = parent_map[node]
-        
+
         # Trace path from LCA to end
         node = end
         while node != lca:
@@ -58,7 +61,6 @@ class PathConstructor:
         path_str = ' '.join(path)
         return path_str
 
-
     def generate_path_contexts(self, ast_tree):
         parent_map = self.get_parent_map(ast_tree)
         self.find_terminal_nodes(ast_tree)
@@ -66,7 +68,8 @@ class PathConstructor:
             for end in self.terminal_nodes[i + 1:]:
                 path = self.construct_path(start, end, parent_map)
                 if path != '':
-                    self.path_contexts.append((self.get_node_label(start), path, self.get_node_label(end)))
+                    self.path_contexts.append(
+                        (self.get_node_label(start), path, self.get_node_label(end)))
         return self.path_contexts
 
     # def get_node_label(self, node):
@@ -140,9 +143,11 @@ class CodeCleaner(ast.NodeTransformer):
 
 
 def convert_python2_to_python3(code):
-    tool = refactor.RefactoringTool(refactor.get_fixers_from_package('lib2to3.fixes'))
+    tool = refactor.RefactoringTool(
+        refactor.get_fixers_from_package('lib2to3.fixes'))
     tree = tool.refactor_string(code, '<string>')
     return str(tree)
+
 
 def clean_code(code):
     comments, code = extract_and_remove_comments(code)
@@ -162,8 +167,8 @@ def clean_code(code):
     tree = cleaner.visit(tree)
 
     # # testing out path creating system
-    # path_constructor = PathConstructor()
-    # paths = path_constructor.generate_path_contexts(tree)
+    path_constructor = PathConstructor()
+    paths = path_constructor.generate_path_contexts(tree)
 
     # breakpoint()
     try:
@@ -171,7 +176,8 @@ def clean_code(code):
     except SyntaxError as e:
         print(f"SyntaxError after conversion: {e}")
         return None, None, {}
-    return cleaned_code, comments, cleaner.name_mapping
+    return cleaned_code, comments, cleaner.name_mapping, paths
+
 
 def extract_and_remove_comments(code):
     comments = re.findall(r'(?m)^\s*#.*$', code)
@@ -179,8 +185,10 @@ def extract_and_remove_comments(code):
     def replace_with_whitespace(match):
         return ' ' * len(match.group(0))
 
-    code_without_comments = re.sub(r'(?m)^\s*#.*$', replace_with_whitespace, code)
+    code_without_comments = re.sub(
+        r'(?m)^\s*#.*$', replace_with_whitespace, code)
     return ' '.join(comments), code_without_comments
+
 
 def process_dataset_item(code):
     comments, code_without_comments = extract_and_remove_comments(code)
@@ -191,10 +199,10 @@ def process_dataset_item(code):
         original_tree = ast.parse(code_without_comments)
         serializable_original_tree = ast.dump(original_tree)
     except SyntaxError:
-        print('Syntax error in original code')
+        # print('Syntax error in original code')
         return None
 
-    cleaned_code, _, name_mapping = clean_code(code_without_comments)
+    cleaned_code, _, name_mapping, paths = clean_code(code_without_comments)
     if cleaned_code is None:
         return None
 
@@ -202,7 +210,7 @@ def process_dataset_item(code):
         cleaned_tree = ast.parse(cleaned_code)
         serializable_cleaned_tree = ast.dump(cleaned_tree)
     except SyntaxError:
-        print('Syntax error in cleaned code')
+        # print('Syntax error in cleaned code')
         return None
 
     return {
@@ -210,7 +218,8 @@ def process_dataset_item(code):
         'cleaned_code': cleaned_code.strip(),
         'original_tree': serializable_original_tree,
         'cleaned_tree': serializable_cleaned_tree,
-        'description': comments.strip()
+        'description': comments.strip(),
+        'paths': paths
     }
 
 
@@ -218,12 +227,14 @@ def process_chunk(chunk):
     processed_items = [process_dataset_item(code) for code in chunk['content']]
     return [item for item in processed_items if item is not None]
 
+
 def create_dataset():
     dataset = load_dataset("bigcode/the-stack-smol", data_dir="data/python")
     num_processes = cpu_count()
     # num_processes = 1 # for testing with 1 core
     chunk_size = len(dataset['train']) // num_processes
-    chunks = [dataset['train'][i:i + chunk_size] for i in range(0, len(dataset['train']), chunk_size)]
+    chunks = [dataset['train'][i:i + chunk_size]
+              for i in range(0, len(dataset['train']), chunk_size)]
 
     with Pool(processes=num_processes) as pool:
         results = pool.map(process_chunk, chunks)
@@ -233,21 +244,29 @@ def create_dataset():
 
     return processed_data
 
+
 def create_dataset_for_testing():
     dataset = load_dataset("bigcode/the-stack-smol", data_dir="data/python")
     processed_data = []
 
-    for code in dataset['train']:
+    count = 0
+    for code in tqdm(dataset['train']):
+        if count == 50:
+            break
         processed_item = process_dataset_item(code['content'])
         if processed_item:
             processed_data.append(processed_item)
-    
-    breakpoint()
+            count += 1
+
+    # breakpoint()
+    with open('code/test_data.pickle', 'wb') as file:
+        pickle.dump(processed_data, file)
 
     return processed_data
 
+
 if __name__ == "__main__":
-    testing = False
+    testing = True
     if testing:
         create_dataset_for_testing()
     else:
