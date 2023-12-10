@@ -7,3 +7,10 @@
 
 # code to AST tree
 #   1. convert multi-line function string into AST tree
+
+# Transformer Model
+1. Figure out our vocab and vocab size, number of unique tokens
+2. create an embedding layer. we want to use this to map each token to a dense vector representation.
+3. create a transformer encoder, which consists of many feedforward NN.
+4. create a transformer output layer. since we want a fixed-size vector representation of the code, the size is the size of the vocab (?)
+5.
