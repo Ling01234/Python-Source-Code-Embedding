@@ -88,7 +88,8 @@ def extract_and_remove_comments(code):
     return ' '.join(comments), code_without_comments
 
 def process_dataset_item(code):
-    comments, code_without_comments = extract_and_remove_comments(code)
+    code_content = code['content']
+    comments, code_without_comments = extract_and_remove_comments(code_content)
     if not comments and not code_without_comments:
         return None
 
@@ -112,14 +113,29 @@ def process_dataset_item(code):
         return None
 
     # write to file    
-    temp_filename = "temp_input/" + code['path'].split('/')[-1]
+    temp_input_dir = os.path.abspath("temp_input")
+
+    temp_filename = os.path.join(temp_input_dir, code['path'].split('/')[-1])
+    
     with open(temp_filename, "w") as tf:
         tf.write(cleaned_code)
 
-    output_file =  "temp_output/" + code['path'].split('/')[-1]
+        
+    temp_output_dir = os.path.abspath("temp_output")
+    output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
+
+
+    cli_path = os.path.join('../', 'astminer', 'cli.sh')
+    print(cli_path)
+
+    if not os.path.isfile(cli_path):
+        raise FileNotFoundError(f"The file {cli_path} was not found.")
+
 
     # Use astminer to create path contexts
-    call_astminer(temp_filename, output_file, None) # <-- add cli path here
+    call_astminer(temp_filename, output_file, cli_path)
+
+    breakpoint()
 
     # Do something to get the path contexts
     path_contexts = None
@@ -127,6 +143,8 @@ def process_dataset_item(code):
     # delete the file
     os.remove(temp_filename)
     os.remove(output_file)
+
+
 
     return {
         # 'original_code': code_without_comments.strip(),
@@ -141,9 +159,18 @@ def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 def call_astminer(path, output_path, cli_path):
-    subprocess.call(
-        f"./{cli_path} code2vec --lang py --project {path} --output {Path(output_path, path.name)} --split-tokens --granularity method --hide-method-name",
-        shell=True)
+    path_obj = Path(path)
+
+    original_dir = "../550Final-project/code/"
+    astminer_path = '../astminer'  
+    os.chdir(astminer_path)
+
+    config_path = '../550Final-project/configs/astTree.yaml'
+    command = f"./cli.sh {config_path}"
+    subprocess.run(command, shell=True, cwd=astminer_path)
+
+    os.chdir(original_dir)
+
 
 def process_chunk(chunk):
     processed_items = [process_dataset_item(code) for code in chunk['content']]
@@ -168,10 +195,9 @@ def create_dataset_for_testing():
     dataset = load_dataset("bigcode/the-stack-smol", data_dir="data/python")
     processed_data = []
 
-    dataset = dataset[:100]
-
     for code in dataset['train']:
-        processed_item = process_dataset_item(code['content'])
+        print(code)
+        processed_item = process_dataset_item(code)
         if processed_item:
             processed_data.append(processed_item)
     
