@@ -124,16 +124,17 @@ def process_dataset_item(code):
     temp_output_dir = os.path.abspath("temp_output")
     output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
 
-
     cli_path = os.path.join('../', 'astminer', 'cli.sh')
-    print(cli_path)
 
     if not os.path.isfile(cli_path):
         raise FileNotFoundError(f"The file {cli_path} was not found.")
-
+    
+    original_dir = "../550Final-project/code/"
+    astminer_path = '../astminer' 
+    config_path = '../550Final-project/configs/astTree.yaml'
 
     # Use astminer to create path contexts
-    call_astminer(temp_filename, output_file, cli_path)
+    call_astminer(original_dir, astminer_path, config_path)
 
     breakpoint()
 
@@ -158,14 +159,9 @@ def process_dataset_item(code):
 def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
-def call_astminer(path, output_path, cli_path):
-    path_obj = Path(path)
-
-    original_dir = "../550Final-project/code/"
-    astminer_path = '../astminer'  
+def call_astminer(original_dir, astminer_path, config_path):
     os.chdir(astminer_path)
 
-    config_path = '../550Final-project/configs/astTree.yaml'
     command = f"./cli.sh {config_path}"
     subprocess.run(command, shell=True, cwd=astminer_path)
 
