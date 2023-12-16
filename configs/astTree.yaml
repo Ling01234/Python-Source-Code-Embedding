@@ -1,0 +1,25 @@
+# input directory (path to project)
+inputDir: /home/noah/COMP550/550Final-project/temp_input
+
+# output directory (path to output)
+outputDir: /home/noah/COMP550/550Final-project/temp_output
+
+# parse Python fields with ANTLR parser or our own ast generator
+parser:
+  name: antlr
+  languages: [py]
+
+filters:
+  - name: by tree size
+    maxTreeSize: 1000
+
+# use file names as labels
+# this selects the file level granularity
+label:
+  name: file name
+
+# extract from each tree paths with certain length
+storage:
+  name: code2vec
+  maxPathLength: 100
+  maxPathWidth: 100

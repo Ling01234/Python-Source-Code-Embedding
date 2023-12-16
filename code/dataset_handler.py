@@ -1,3 +1,6 @@
+import random
+import string
+import subprocess
 from datasets import load_dataset
 from multiprocessing import Pool, cpu_count
 import ast
@@ -5,101 +8,8 @@ from lib2to3 import refactor
 import re
 import ast
 import builtins
-
-class PathConstructor:
-    def __init__(self):
-        self.terminal_nodes = []
-        self.path_contexts = []
-
-    def is_terminal(self, node):
-        return not any(isinstance(child, ast.AST) for child in ast.iter_child_nodes(node))
-
-    def find_terminal_nodes(self, node):
-        if self.is_terminal(node):
-            if not isinstance(node, ast.alias):
-                self.terminal_nodes.append(node)
-        else:
-            for child in ast.iter_child_nodes(node):
-                self.find_terminal_nodes(child)
-
-    def get_parent_map(self, node, parent=None, parent_map=None):
-        if parent_map is None:
-            parent_map = {}
-        parent_map[node] = parent
-        for child in ast.iter_child_nodes(node):
-            self.get_parent_map(child, node, parent_map)
-        return parent_map
-
-    def find_lowest_common_ancestor(self, node1, node2, parent_map):
-        ancestors = set()
-        while node1:
-            ancestors.add(node1)
-            node1 = parent_map[node1]
-        while node2 not in ancestors:
-            node2 = parent_map[node2]
-        return node2
-
-    def construct_path(self, start, end, parent_map):
-        lca = self.find_lowest_common_ancestor(start, end, parent_map)
-
-        path = []
-        # Trace path from start to LCA
-        node = start
-        while node != lca:
-            path.append(self.get_node_label(node) + '↑')
-            node = parent_map[node]
-        
-        # Trace path from LCA to end
-        node = end
-        while node != lca:
-            path.append(self.get_node_label(node) + '↓')
-            node = parent_map[node]
-
-        path_str = ' '.join(path)
-        return path_str
-
-
-    def generate_path_contexts(self, ast_tree):
-        parent_map = self.get_parent_map(ast_tree)
-        self.find_terminal_nodes(ast_tree)
-        for i, start in enumerate(self.terminal_nodes):
-            for end in self.terminal_nodes[i + 1:]:
-                path = self.construct_path(start, end, parent_map)
-                if path != '':
-                    self.path_contexts.append((self.get_node_label(start), path, self.get_node_label(end)))
-        return self.path_contexts
-
-    # def get_node_label(self, node):
-    #     # breakpoint()
-    #     if isinstance(node, ast.Name):
-    #         return node.id  # Variable name
-    #     elif isinstance(node, ast.Expr):
-    #         return node.id
-    #     elif isinstance(node, ast.Constant):
-    #         return str(node.value)  # Constant value
-    #     elif isinstance(node, ast.FunctionDef):
-    #         return node.name  # Function name
-    #     elif isinstance(node, ast.arg):
-    #         return node.arg  # Function argument name
-    #     else:
-    #         return type(node).name  # Fallback to node type
-
-    def get_node_label(self, node):
-        # Check if the node is a terminal node and return the value
-        if isinstance(node, (ast.Name, ast.Constant, ast.FunctionDef, ast.arg, ast.Expr)):
-            if hasattr(node, 'id'):
-                return node.id
-            elif hasattr(node, 'value'):
-                return str(node.value)
-            elif hasattr(node, 'name'):
-                return node.name
-            elif hasattr(node, 'arg'):
-                return node.arg
-            else:
-                # This will handle ast.Expr and other terminal nodes
-                return type(node).__name__
-        else:
-            return type(node).__name__  # Fallback to node type
+import os
+from pathlib import Path
 
 
 class CodeCleaner(ast.NodeTransformer):
@@ -161,11 +71,6 @@ def clean_code(code):
     cleaner = CodeCleaner()
     tree = cleaner.visit(tree)
 
-    # # testing out path creating system
-    # path_constructor = PathConstructor()
-    # paths = path_constructor.generate_path_contexts(tree)
-
-    # breakpoint()
     try:
         cleaned_code = ast.unparse(tree)  # Return the source as a string
     except SyntaxError as e:
@@ -183,7 +88,8 @@ def extract_and_remove_comments(code):
     return ' '.join(comments), code_without_comments
 
 def process_dataset_item(code):
-    comments, code_without_comments = extract_and_remove_comments(code)
+    code_content = code['content']
+    comments, code_without_comments = extract_and_remove_comments(code_content)
     if not comments and not code_without_comments:
         return None
 
@@ -191,10 +97,11 @@ def process_dataset_item(code):
         original_tree = ast.parse(code_without_comments)
         serializable_original_tree = ast.dump(original_tree)
     except SyntaxError:
-        print('Syntax error in original code')
+        # print('Syntax error in original code')
         return None
 
     cleaned_code, _, name_mapping = clean_code(code_without_comments)
+    cleaned_code = cleaned_code.strip()
     if cleaned_code is None:
         return None
 
@@ -205,13 +112,60 @@ def process_dataset_item(code):
         print('Syntax error in cleaned code')
         return None
 
+    # write to file    
+    temp_input_dir = os.path.abspath("temp_input")
+
+    temp_filename = os.path.join(temp_input_dir, code['path'].split('/')[-1])
+    
+    with open(temp_filename, "w") as tf:
+        tf.write(cleaned_code)
+
+        
+    temp_output_dir = os.path.abspath("temp_output")
+    output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
+
+    cli_path = os.path.join('../', 'astminer', 'cli.sh')
+
+    if not os.path.isfile(cli_path):
+        raise FileNotFoundError(f"The file {cli_path} was not found.")
+    
+    original_dir = "../550Final-project/code/"
+    astminer_path = '../astminer' 
+    config_path = '../550Final-project/configs/astTree.yaml'
+
+    # Use astminer to create path contexts
+    call_astminer(original_dir, astminer_path, config_path)
+
+    breakpoint()
+
+    # Do something to get the path contexts
+    path_contexts = None
+
+    # delete the file
+    os.remove(temp_filename)
+    os.remove(output_file)
+
+
+
     return {
-        'original_code': code_without_comments.strip(),
-        'cleaned_code': cleaned_code.strip(),
-        'original_tree': serializable_original_tree,
-        'cleaned_tree': serializable_cleaned_tree,
-        'description': comments.strip()
+        # 'original_code': code_without_comments.strip(),
+        'cleaned_code': cleaned_code,
+        # 'original_tree': serializable_original_tree,
+        # 'cleaned_tree': serializable_cleaned_tree,
+        'description': comments.strip(),
+        'path_contexts': path_contexts
     }
+
+def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
+
+def call_astminer(original_dir, astminer_path, config_path):
+    os.chdir(astminer_path)
+
+    command = f"./cli.sh {config_path}"
+    subprocess.run(command, shell=True, cwd=astminer_path)
+
+    os.chdir(original_dir)
 
 
 def process_chunk(chunk):
@@ -238,7 +192,8 @@ def create_dataset_for_testing():
     processed_data = []
 
     for code in dataset['train']:
-        processed_item = process_dataset_item(code['content'])
+        print(code)
+        processed_item = process_dataset_item(code)
         if processed_item:
             processed_data.append(processed_item)
     
@@ -247,7 +202,7 @@ def create_dataset_for_testing():
     return processed_data
 
 if __name__ == "__main__":
-    testing = False
+    testing = True
     if testing:
         create_dataset_for_testing()
     else:
