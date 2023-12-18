@@ -118,8 +118,8 @@ def process_dataset_item(code):
 
     temp_filename = os.path.join(temp_input_dir, code['path'].split('/')[-1])
     
-    # with open(temp_filename, "w") as tf:
-    #     tf.write(cleaned_code)
+    with open(temp_filename, "w") as tf:
+        tf.write(cleaned_code)
 
         
     temp_output_dir = os.path.abspath("temp_output")
@@ -150,7 +150,7 @@ def process_dataset_item(code):
     processed_data = read_and_process_c2s(c2s_file_path, token_mapping, path_mapping, node_type_mapping)
 
     # Save to a new file (optional)
-    with open('processed_path_contexts.c2s', 'w') as output_file:
+    with open('temp_ouput/processed_path_contexts.c2s', 'w') as output_file:
         for inner_list in processed_data:
             for item in inner_list:
                 output_file.write(str(item) + '\n')
