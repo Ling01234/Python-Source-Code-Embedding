@@ -9,6 +9,7 @@ import re
 import ast
 import builtins
 import os
+import pandas as pd
 from pathlib import Path
 
 
@@ -117,8 +118,8 @@ def process_dataset_item(code):
 
     temp_filename = os.path.join(temp_input_dir, code['path'].split('/')[-1])
     
-    with open(temp_filename, "w") as tf:
-        tf.write(cleaned_code)
+    # with open(temp_filename, "w") as tf:
+    #     tf.write(cleaned_code)
 
         
     temp_output_dir = os.path.abspath("temp_output")
@@ -136,25 +137,83 @@ def process_dataset_item(code):
     # Use astminer to create path contexts
     call_astminer(original_dir, astminer_path, config_path)
 
-    breakpoint()
+    c2s_file_path = "/home/noah/COMP550/550Final-project/temp_output/py/data/path_contexts.c2s"
 
     # Do something to get the path contexts
-    path_contexts = None
+    #cpath_contexts = read_path_contexts(c2s_file_path)
+
+    token_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/tokens.csv')
+    node_type_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/node_types.csv')
+    path_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/paths.csv')
+
+    # processed_path_contexts = process_path_contexts(c2s_file_path, token_mapping, path_mapping)
+    processed_data = read_and_process_c2s(c2s_file_path, token_mapping, path_mapping, node_type_mapping)
+
+    # Save to a new file (optional)
+    with open('processed_path_contexts.c2s', 'w') as output_file:
+        for inner_list in processed_data:
+            for item in inner_list:
+                output_file.write(str(item) + '\n')
+                
+            
+
+    breakpoint()
 
     # delete the file
     os.remove(temp_filename)
     os.remove(output_file)
 
-
-
     return {
         # 'original_code': code_without_comments.strip(),
         'cleaned_code': cleaned_code,
         # 'original_tree': serializable_original_tree,
-        # 'cleaned_tree': serializable_cleaned_tree,
+        'cleaned_tree': serializable_cleaned_tree,
         'description': comments.strip(),
-        'path_contexts': path_contexts
+        'path_contexts': processed_data
     }
+
+def load_mappings_to_dataframe(file_path):
+    return pd.read_csv(file_path, header=0, index_col=0).to_dict(orient='index')
+
+def read_and_process_c2s(file_path, token_mapping, path_mapping, node_type_mapping):
+    processed_data = []
+
+    with open(file_path, 'r') as file:
+        for line in file:
+            processed_line = process_path_context(line, token_mapping, path_mapping, node_type_mapping)
+            processed_data.append(processed_line)
+
+    return processed_data
+
+def process_path_context(line, token_mapping, path_mapping, node_type_mapping):
+    label, *path_contexts = line.strip().split()
+    processed_line = [label]
+
+    for context in path_contexts:
+        path_nodes = []
+        start_token_id, path_id, end_token_id = context.split(',')
+
+        path_nodes_info = path_mapping.get(int(path_id))
+        if path_nodes_info is None:
+            path_nodes = [{'Unknown': 'Unknown'}]
+        else:
+            if isinstance(path_nodes_info, dict):
+                path_nodes_ids = []
+                for value in path_nodes_info.values():
+                    path_nodes_ids.extend(value.split())
+            else:
+                path_nodes_ids = path_nodes_info.split()
+
+            for node_id in path_nodes_ids:
+                node_type = node_type_mapping.get(int(node_id), 'Unknown')
+                path_nodes.append({node_id: node_type['node_type']})
+
+        path_nodes.insert(0,start_token_id)
+        path_nodes.append(end_token_id)
+
+        processed_line.append(path_nodes)
+
+    return processed_line
 
 def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
