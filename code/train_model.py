@@ -31,26 +31,97 @@ class TransformerDecoder(nn.Module):
         decoded = self.transformer_decoder(embedded, memory)
         return self.fc(decoded.mean(dim=1))
 
-class CodeDataset(Dataset):
-    def __init__(self, paths, function_names, vocab_size):
-        self.paths = paths
-        self.function_names = function_names
-        self.vocab_size = vocab_size
+class Vocabulary:
+    def __init__(self, special_tokens=None):
+        self.itos = {}  # integer-to-string mapping
+        self.stoi = {}  # string-to-integer mapping
+
+        self.special_tokens = special_tokens if special_tokens else ['<PAD>', '<UNK>']
+
+        for i, token in enumerate(self.special_tokens):
+            self.itos[i] = token
+            self.stoi[token] = i
+
+    def add_token(self, token):
+        if token not in self.stoi:
+            index = len(self.itos)
+            self.itos[index] = token
+            self.stoi[token] = index
 
     def __len__(self):
-        return len(self.paths)
+        return len(self.itos)
+
+    def encode(self, token_list):
+        return [self.stoi[token] if token in self.stoi else self.stoi['<UNK>'] for token in token_list]
+
+    def decode(self, index_list):
+        return [self.itos[index] for index in index_list]
+    
+class LabelEncoder:
+    def __init__(self):
+        self.label_to_index = {}
+        self.index_to_label = {}
+
+    def add_label(self, label):
+        if label not in self.label_to_index:
+            index = len(self.label_to_index)
+            self.label_to_index[label] = index
+            self.index_to_label[index] = label
+
+    def encode(self, label):
+        return self.label_to_index[label]
+
+    def decode(self, index):
+        return self.index_to_label[index]
+
+    def __len__(self):
+        return len(self.label_to_index)
+
+
+class CodeDataset(Dataset):
+    def __init__(self, encoded_function_paths, function_name_indices, vocab):
+        self.encoded_function_paths = encoded_function_paths
+        self.function_name_indices = function_name_indices
+        self.vocab = vocab
+
+    def __len__(self):
+        return len(self.encoded_function_paths)
 
     def __getitem__(self, idx):
-        # This is where you would convert paths and function names to tensor of token indices
-        # For simplicity, let's assume paths and function_names are already tokenized
-        return torch.tensor(self.paths[idx]), torch.tensor(self.function_names[idx])
+        max_length = 512
+        function_path_sequence = self.encoded_function_paths[idx][:max_length]
+        padded_sequence = function_path_sequence + [self.vocab.stoi['<PAD>']] * (max_length - len(function_path_sequence))
+        
+        function_name_index = self.function_name_indices[idx]
+        return torch.tensor(padded_sequence), torch.tensor(function_name_index)
 
-# Example Usage
-# paths = [[tokenized path 1], [tokenized path 2], ...]
-# function_names = [[tokenized name 1], [tokenized name 2], ...]
-dataset = CodeDataset(paths, function_names, vocab_size=10000)
+
+def tokenize_and_encode_paths(paths_list, vocab):
+    """
+    Tokenizes and encodes a list of paths for each function.
+    Each path is a list of elements. 
+    """
+    encoded_paths = []
+    for paths in paths_list:  # Iterate over lists of paths for each function
+        encoded_function_paths = []
+        for path in paths:  # Iterate over each path
+            for element in path.split('/'):  # Tokenize each element in the path
+                vocab.add_token(element)  # Add element to vocabulary
+                encoded_function_paths.append(vocab.stoi[element])  # Encode the element
+        encoded_paths.append(encoded_function_paths)
+    return encoded_paths
+
+# dataset tokenizing and loading
+vocab = Vocabulary(special_tokens=['<PAD>', '<UNK>'])
+encoded_function_paths = tokenize_and_encode_paths(function_paths, vocab)
+
+label_encoder = LabelEncoder()
+for name in function_names:
+    label_encoder.add_label(name)
+encoded_function_names = [label_encoder.encode(name) for name in function_names]
+
+dataset = CodeDataset(encoded_function_paths, encoded_function_names, vocab)
 dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
-
 
 # Model Hyperparameters
 input_dim = 10000  # Size of your vocabulary
