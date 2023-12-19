@@ -293,7 +293,12 @@ def call_astminer(original_dir, astminer_path, config_path):
 
 
 def process_chunk(chunk):
-    processed_items = [process_dataset_item(code) for code in chunk['content']]
+    processed_items = []
+    for code in chunk['content']:
+        path_contexts_set = process_dataset_item(code)
+        if path_contexts_set:
+            processed_items.extend(path_contexts_set)
+
     return [item for item in processed_items if item is not None]
 
 def create_dataset():
@@ -318,7 +323,7 @@ def create_dataset_for_testing():
     for code in dataset['train']:
         processed_item = process_dataset_item(code)
         if processed_item:
-            processed_data.append(processed_item)
+            processed_data.extend(processed_item)
     
     breakpoint()
 
