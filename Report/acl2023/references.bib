@@ -33,3 +33,28 @@
   institution = {UC Irvine},
   note        = {ProQuest ID: Prasad\_uci\_0030M\_16699. Merritt ID: ark:/13030/m5wb1h48. Retrieved from https://escholarship.org/uc/item/5qx4b1xh}
 }
+
+
+@inproceedings{clone_ast,
+  author    = {I. D. Baxter and A. Yahin and L. Moura and M. Sant'Anna and L. Bier},
+  title     = {Clone Detection Using Abstract Syntax Trees},
+  booktitle = {Proceedings. International Conference on Software Maintenance (Cat. No. 98CB36272)},
+  year      = {1998},
+  pages     = {368--377},
+  doi       = {10.1109/ICSM.1998.738528},
+  address   = {Bethesda, MD, USA}
+}
+
+@article{transformer_code_token,
+  title    = {Efficient transformer with code token learner for code clone detection},
+  journal  = {Journal of Systems and Software},
+  volume   = {197},
+  pages    = {111557},
+  year     = {2023},
+  issn     = {0164-1212},
+  doi      = {https://doi.org/10.1016/j.jss.2022.111557},
+  url      = {https://www.sciencedirect.com/science/article/pii/S0164121222002333},
+  author   = {Aiping Zhang and Liming Fang and Chunpeng Ge and Piji Li and Zhe Liu},
+  keywords = {Code clone detection, Code token learner, Efficient transformer},
+  abstract = {Deep learning techniques have achieved promising results in code clone detection in the past decade. Unfortunately, current deep learning-based methods rarely explicitly consider the modeling of long codes. Worse, the code length is increasing due to the increasing requirement of complex functions. Thus, modeling the relationship between code tokens to catch their long-range dependencies is crucial to comprehensively capture the information of the code fragment. In this work, we resort to the Transformer to capture long-range dependencies within a code, which however requires huge computational cost for long code fragments. To make it possible to apply Transformer efficiently, we propose a code token learner to largely reduce the number of feature tokens in an automatic way. Besides, considering the tree structure of the abstract syntax tree, we present a tree-based position embedding to encode the position of each token in the input. Apart from the Transformer that captures the dependency within a code, we further leverage a cross-code attention module to capture the similarities between two code fragments. Our method significantly reduces the computational cost of using Transformer by 97% while achieves superior performance with state-of-the-art methods. Our code is available at https://github.com/ArcticHare105/Code-Token-Learner.}
+}
