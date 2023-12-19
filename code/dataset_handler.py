@@ -11,6 +11,8 @@ import builtins
 import os
 import pandas as pd
 from pathlib import Path
+import shutil
+import csv
 
 
 class CodeCleaner(ast.NodeTransformer):
@@ -91,6 +93,8 @@ def extract_and_remove_comments(code):
 def process_dataset_item(code):
     code_content = code['content']
     comments, code_without_comments = extract_and_remove_comments(code_content)
+    code_without_comments = remove_chinese_characters(code_without_comments)
+
     if not comments and not code_without_comments:
         return None
 
@@ -116,7 +120,8 @@ def process_dataset_item(code):
     # write to file    
     temp_input_dir = os.path.abspath("temp_input")
 
-    temp_filename = os.path.join(temp_input_dir, code['path'].split('/')[-1])
+    temp_filename = os.path.join('/home/noah/COMP550/550Final-project/temp_input', code['path'].split('/')[-1])
+    #breakpoint()
     
     with open(temp_filename, "w") as tf:
         tf.write(cleaned_code)
@@ -124,14 +129,17 @@ def process_dataset_item(code):
         
     temp_output_dir = os.path.abspath("temp_output")
     output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
+    print(output_file)
+    #breakpoint()
 
-    cli_path = os.path.join('../', 'astminer', 'cli.sh')
+    cli_path = '/home/noah/COMP550/astminer/cli.sh'
+    # cli_path = os.path.join(cli_path, '/cli.sh')
 
     if not os.path.isfile(cli_path):
         raise FileNotFoundError(f"The file {cli_path} was not found.")
     
     original_dir = "../550Final-project/code/"
-    astminer_path = '../astminer' 
+    astminer_path = '/home/noah/COMP550/astminer/' 
     config_path = '../550Final-project/configs/astTree.yaml'
 
     # Use astminer to create path contexts
@@ -148,20 +156,21 @@ def process_dataset_item(code):
 
     # processed_path_contexts = process_path_contexts(c2s_file_path, token_mapping, path_mapping)
     processed_data = read_and_process_c2s(c2s_file_path, token_mapping, path_mapping, node_type_mapping)
+    if(processed_data == None):
+        os.remove(temp_filename)
+        shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
+        return
 
     # Save to a new file (optional)
-    with open('temp_ouput/processed_path_contexts.c2s', 'w') as output_file:
-        for inner_list in processed_data:
-            for item in inner_list:
-                output_file.write(str(item) + '\n')
-                
-            
-
-    breakpoint()
+    with open('/home/noah/COMP550/550Final-project/temp_output/processed_path_contexts.csv', 'a+', newline='') as output_file:
+        writer = csv.writer(output_file)
+        writer.writerow(processed_data)
 
     # delete the file
     os.remove(temp_filename)
-    os.remove(output_file)
+    # breakpoint()
+    shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
+    # breakpoint()
 
     return {
         # 'original_code': code_without_comments.strip(),
@@ -178,6 +187,10 @@ def load_mappings_to_dataframe(file_path):
 def read_and_process_c2s(file_path, token_mapping, path_mapping, node_type_mapping):
     processed_data = []
 
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return
+
     with open(file_path, 'r') as file:
         for line in file:
             processed_line = process_path_context(line, token_mapping, path_mapping, node_type_mapping)
@@ -185,13 +198,27 @@ def read_and_process_c2s(file_path, token_mapping, path_mapping, node_type_mappi
 
     return processed_data
 
+def remove_chinese_characters(text):
+    # Regular expression for matching Chinese characters
+    chinese_char_pattern = r'[\u4e00-\u9fff]'
+
+    # Replace Chinese characters with an empty string
+    cleaned_text = re.sub(chinese_char_pattern, '', text)
+
+    return cleaned_text
+
 def process_path_context(line, token_mapping, path_mapping, node_type_mapping):
     label, *path_contexts = line.strip().split()
     processed_line = [label]
 
     for context in path_contexts:
         path_nodes = []
-        start_token_id, path_id, end_token_id = context.split(',')
+        parts = context.split(',')
+        if len(parts) != 3:
+            print(f"Invalid format in context: {context}")
+            continue  # Skip this context and move to the next
+
+        start_token_id, path_id, end_token_id = parts
 
         path_nodes_info = path_mapping.get(int(path_id))
         if path_nodes_info is None:
@@ -206,10 +233,10 @@ def process_path_context(line, token_mapping, path_mapping, node_type_mapping):
 
             for node_id in path_nodes_ids:
                 node_type = node_type_mapping.get(int(node_id), 'Unknown')
-                path_nodes.append({node_id: node_type['node_type']})
+                path_nodes.append({int(node_id): node_type['node_type']})
 
-        path_nodes.insert(0,start_token_id)
-        path_nodes.append(end_token_id)
+        path_nodes.insert(0,int(start_token_id))
+        path_nodes.append(int(end_token_id))
 
         processed_line.append(path_nodes)
 
@@ -251,7 +278,6 @@ def create_dataset_for_testing():
     processed_data = []
 
     for code in dataset['train']:
-        print(code)
         processed_item = process_dataset_item(code)
         if processed_item:
             processed_data.append(processed_item)
