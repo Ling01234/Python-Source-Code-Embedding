@@ -2,6 +2,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import random_split
+from sklearn.metrics import accuracy_score, precision_score, f1_score
+import numpy as np
+
 
 # Transformer Encoder Model
 class TransformerEncoder(nn.Module):
@@ -111,6 +115,14 @@ def tokenize_and_encode_paths(paths_list, vocab):
         encoded_paths.append(encoded_function_paths)
     return encoded_paths
 
+def calculate_metrics(preds, labels):
+    preds = np.argmax(preds, axis=1)
+    accuracy = accuracy_score(labels, preds)
+    precision = precision_score(labels, preds, average='weighted')
+    f1 = f1_score(labels, preds, average='weighted')
+    return accuracy, precision, f1
+
+
 # dataset tokenizing and loading
 vocab = Vocabulary(special_tokens=['<PAD>', '<UNK>'])
 encoded_function_paths = tokenize_and_encode_paths(function_paths, vocab)
@@ -121,7 +133,13 @@ for name in function_names:
 encoded_function_names = [label_encoder.encode(name) for name in function_names]
 
 dataset = CodeDataset(encoded_function_paths, encoded_function_names, vocab)
-dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+
+train_size = int(0.7 * len(dataset))
+test_size = len(dataset) - train_size
+
+train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
 # Model Hyperparameters
 input_dim = 10000  # Size of your vocabulary
@@ -142,7 +160,7 @@ decoder_optimizer = optim.Adam(decoder.parameters(), lr=0.001)
 
 # Training Loop
 for epoch in range(num_epochs):
-    for paths, function_names in dataloader:
+    for paths, function_names in train_loader:
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
 
@@ -159,3 +177,19 @@ for epoch in range(num_epochs):
         decoder_optimizer.step()
 
         print(f"Epoch {epoch}, Loss: {loss.item()}")
+
+encoder.eval()
+decoder.eval()
+
+all_preds = []
+all_labels = []
+
+with torch.no_grad():
+    for paths, function_names in test_loader:
+        encoder_output = encoder(paths)
+        decoder_output = decoder(function_names, encoder_output)
+        
+        all_preds.extend(decoder_output.cpu().numpy())
+        all_labels.extend(function_names.cpu().numpy())
+
+accuracy, precision, f1 = calculate_metrics(all_preds, all_labels)

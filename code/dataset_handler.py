@@ -16,6 +16,7 @@ from pathlib import Path
 import shutil
 import csv
 
+
 class CodeCleaner(ast.NodeTransformer):
     def __init__(self):
         self.var_counter = 1
@@ -207,9 +208,7 @@ def process_dataset_item(code):
 
         # delete the file
         os.remove(temp_filename)
-        # breakpoint()
         shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
-        # breakpoint()
 
         path_contexts_set.append((processed_data, func_name))
 
@@ -218,7 +217,7 @@ def process_dataset_item(code):
         'cleaned_code': cleaned_code,
         # 'original_tree': serializable_original_tree,
         'description': comments.strip(),
-        'path_contexts': processed_data
+        'path_contexts': path_contexts_set
     }
 
 def load_mappings_to_dataframe(file_path):
@@ -305,7 +304,7 @@ def process_chunk(chunk):
 
 def create_dataset():
     dataset = load_dataset("bigcode/the-stack-smol", data_dir="data/python")
-    num_processes = cpu_count()
+    num_processes = cpu_count() - 2
     # num_processes = 1 # for testing with 1 core
     chunk_size = len(dataset['train']) // num_processes
     chunks = [dataset['train'][i:i + chunk_size] for i in range(0, len(dataset['train']), chunk_size)]
