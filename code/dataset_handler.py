@@ -157,76 +157,64 @@ def process_dataset_item(code):
     
     function_set = rename_functions(function_sources)
 
+    path_contexts_set = []
 
-    # TODO: could use this section to generate an AST tree for each function, for use in GNNs if we want.
-    # try:
-    #     cleaned_tree = ast.parse(cleaned_code)
-    #     serializable_cleaned_tree = ast.dump(cleaned_tree)
-    # except SyntaxError:
-    #     print('Syntax error in cleaned code')
-    #     return None
+    for function, func_name in function_set:
+        temp_filename = os.path.join('/home/noah/COMP550/550Final-project/temp_input', code['path'].split('/')[-1])
+        
+        # with open(temp_filename, "w") as tf:
+        #     tf.write(cleaned_code)
 
+        temp_output_dir = os.path.abspath("temp_output")
+        output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
+        print(output_file)
 
+        cli_path = '/home/noah/COMP550/astminer/cli.sh'
+        # cli_path = os.path.join(cli_path, '/cli.sh')
 
-    # write to file    
-    # temp_input_dir = os.path.abspath("temp_input")
+        # if not os.path.isfile(cli_path):
+        #     raise FileNotFoundError(f"The file {cli_path} was not found."
+        
+        original_dir = "../550Final-project/code/"
+        astminer_path = '/home/noah/COMP550/astminer/' 
+        config_path = '../550Final-project/configs/astTree.yaml'
 
-    temp_filename = os.path.join('/home/noah/COMP550/550Final-project/temp_input', code['path'].split('/')[-1])
-    #breakpoint()
-    
-    # with open(temp_filename, "w") as tf:
-    #     tf.write(cleaned_code)
+        # Use astminer to create path contexts
+        call_astminer(original_dir, astminer_path, config_path)
 
-    temp_output_dir = os.path.abspath("temp_output")
-    output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
-    print(output_file)
-    #breakpoint()
+        c2s_file_path = "/home/noah/COMP550/550Final-project/temp_output/py/data/path_contexts.c2s"
 
-    cli_path = '/home/noah/COMP550/astminer/cli.sh'
-    # cli_path = os.path.join(cli_path, '/cli.sh')
+        # Do something to get the path contexts
+        #cpath_contexts = read_path_contexts(c2s_file_path)
 
-    # if not os.path.isfile(cli_path):
-    #     raise FileNotFoundError(f"The file {cli_path} was not found."
-    
-    original_dir = "../550Final-project/code/"
-    astminer_path = '/home/noah/COMP550/astminer/' 
-    config_path = '../550Final-project/configs/astTree.yaml'
+        token_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/tokens.csv')
+        node_type_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/node_types.csv')
+        path_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/paths.csv')
 
-    # Use astminer to create path contexts
-    call_astminer(original_dir, astminer_path, config_path)
+        # processed_path_contexts = process_path_contexts(c2s_file_path, token_mapping, path_mapping)
+        processed_data = read_and_process_c2s(c2s_file_path, token_mapping, path_mapping, node_type_mapping)
+        if(processed_data == None):
+            os.remove(temp_filename)
+            shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
+            return
 
-    c2s_file_path = "/home/noah/COMP550/550Final-project/temp_output/py/data/path_contexts.c2s"
+        # Save to a new file (optional)
+        with open('/home/noah/COMP550/550Final-project/temp_output/processed_path_contexts.csv', 'a+', newline='') as output_file:
+            writer = csv.writer(output_file)
+            writer.writerow(processed_data)
 
-    # Do something to get the path contexts
-    #cpath_contexts = read_path_contexts(c2s_file_path)
-
-    token_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/tokens.csv')
-    node_type_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/node_types.csv')
-    path_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/paths.csv')
-
-    # processed_path_contexts = process_path_contexts(c2s_file_path, token_mapping, path_mapping)
-    processed_data = read_and_process_c2s(c2s_file_path, token_mapping, path_mapping, node_type_mapping)
-    if(processed_data == None):
+        # delete the file
         os.remove(temp_filename)
+        # breakpoint()
         shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
-        return
+        # breakpoint()
 
-    # Save to a new file (optional)
-    with open('/home/noah/COMP550/550Final-project/temp_output/processed_path_contexts.csv', 'a+', newline='') as output_file:
-        writer = csv.writer(output_file)
-        writer.writerow(processed_data)
-
-    # delete the file
-    os.remove(temp_filename)
-    # breakpoint()
-    shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
-    # breakpoint()
+        path_contexts_set.append((processed_data, func_name))
 
     return {
         # 'original_code': code_without_comments.strip(),
         'cleaned_code': cleaned_code,
         # 'original_tree': serializable_original_tree,
-        'cleaned_tree': serializable_cleaned_tree,
         'description': comments.strip(),
         'path_contexts': processed_data
     }
