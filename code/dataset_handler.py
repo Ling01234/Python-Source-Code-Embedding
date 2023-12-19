@@ -216,7 +216,7 @@ def process_path_context(line, token_mapping, path_mapping, node_type_mapping):
         parts = context.split(',')
         if len(parts) != 3:
             print(f"Invalid format in context: {context}")
-            continue  # Skip this context and move to the next
+            continue 
 
         start_token_id, path_id, end_token_id = parts
 
