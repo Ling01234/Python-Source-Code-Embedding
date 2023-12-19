@@ -37,14 +37,15 @@ cleaned function goes into ast miner (limit the size TBD)
 4. code2vec paper (steps taken)
 
 model
-2 models: encoder and decoder
-encoder: model we generate, create a vector emb for the data
-decoder: takes in vector emb, and tries to predict the function name (label)
-both trained together
-error is coming from output of the decoder (compared to label), and propogate back to encoder
-that is how we train both models simultaneously.
+1. 2 models: encoder and decoder
+2. encoder: model we generate, create a vector emb for the data
+3. decoder: takes in vector emb, and tries to predict the function name (label)
+4. both trained together
+5. error is coming from output of the decoder (compared to label), and propogate back to encoder
+6. that is how we train both models simultaneously.
 
-cleaning var names
-try to limit number of path contexts
-using python instead of java
-conv layer maybe, before encoder, so that it can select areas of
+Different things:
+1. cleaning var names
+2. try to limit number of path contexts
+3. using python instead of java
+4. conv layer maybe, before encoder, so that it can select areas of
