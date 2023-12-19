@@ -140,6 +140,7 @@ def rename_functions(function_list):
 def process_dataset_item(code):
     code_content = code['content']
     comments, code_without_comments = extract_and_remove_comments(code_content)
+    print(comments)
     code_without_comments = remove_chinese_characters(code_without_comments)
 
     if not comments and not code_without_comments:
@@ -151,7 +152,7 @@ def process_dataset_item(code):
         # print('Syntax error in original code')
         return None
 
-    cleaned_code, comments, name_mappings, function_sources = clean_code(code_without_comments)
+    cleaned_code, clean_comments, name_mappings, function_sources = clean_code(code_without_comments)
     if function_sources is None:
         return []
     
@@ -162,12 +163,12 @@ def process_dataset_item(code):
     for function, func_name in function_set:
         temp_filename = os.path.join('/home/noah/COMP550/550Final-project/temp_input', code['path'].split('/')[-1])
         
-        # with open(temp_filename, "w") as tf:
-        #     tf.write(cleaned_code)
+        with open(temp_filename, "w") as tf:
+            tf.write(function)
 
         temp_output_dir = os.path.abspath("temp_output")
         output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
-        print(output_file)
+        
 
         cli_path = '/home/noah/COMP550/astminer/cli.sh'
         # cli_path = os.path.join(cli_path, '/cli.sh')
@@ -202,6 +203,7 @@ def process_dataset_item(code):
         with open('/home/noah/COMP550/550Final-project/temp_output/processed_path_contexts.csv', 'a+', newline='') as output_file:
             writer = csv.writer(output_file)
             writer.writerow(processed_data)
+        breakpoint()
 
         # delete the file
         os.remove(temp_filename)
