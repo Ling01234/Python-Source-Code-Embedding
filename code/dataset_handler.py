@@ -201,10 +201,10 @@ def process_dataset_item(code):
             return
 
         # Save to a new file (optional)
-        with open('/home/noah/COMP550/550Final-project/temp_output/processed_path_contexts.csv', 'a+', newline='') as output_file:
-            writer = csv.writer(output_file)
-            writer.writerow(processed_data)
-        breakpoint()
+        # with open('/home/noah/COMP550/550Final-project/temp_output/processed_path_contexts.csv', 'a+', newline='') as output_file:
+        #     writer = csv.writer(output_file)
+        #     writer.writerow(processed_data)
+        # breakpoint()
 
         # delete the file
         os.remove(temp_filename)
@@ -313,6 +313,10 @@ def create_dataset():
         results = pool.map(process_chunk, chunks)
 
     processed_data = [item for sublist in results for item in sublist]
+
+    df = pd.DataFrame(processed_data, columns=['CP', 'Label'])
+    df.to_csv('processed_context_paths.csv', index=False)
+
     breakpoint()
 
     return processed_data
@@ -325,7 +329,9 @@ def create_dataset_for_testing():
         processed_item = process_dataset_item(code)
         if processed_item:
             processed_data.extend(processed_item)
-    
+
+    df = pd.DataFrame(processed_data, columns=['CP', 'Label'])
+    df.to_csv('processed_context_paths.csv', index=False)
     breakpoint()
 
     return processed_data
