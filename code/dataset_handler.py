@@ -11,8 +11,10 @@ import ast
 import builtins
 import os
 import re
-
-
+import pandas as pd
+from pathlib import Path
+import shutil
+import csv
 
 class CodeCleaner(ast.NodeTransformer):
     def __init__(self):
@@ -138,6 +140,8 @@ def rename_functions(function_list):
 def process_dataset_item(code):
     code_content = code['content']
     comments, code_without_comments = extract_and_remove_comments(code_content)
+    code_without_comments = remove_chinese_characters(code_without_comments)
+
     if not comments and not code_without_comments:
         return None
 
@@ -167,44 +171,126 @@ def process_dataset_item(code):
     # write to file    
     # temp_input_dir = os.path.abspath("temp_input")
 
-    # temp_filename = os.path.join(temp_input_dir, code['path'].split('/')[-1])
+    temp_filename = os.path.join('/home/noah/COMP550/550Final-project/temp_input', code['path'].split('/')[-1])
+    #breakpoint()
     
     # with open(temp_filename, "w") as tf:
     #     tf.write(cleaned_code)
 
-        
-    # temp_output_dir = os.path.abspath("temp_output")
-    # output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
+    temp_output_dir = os.path.abspath("temp_output")
+    output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
+    print(output_file)
+    #breakpoint()
 
-    # cli_path = os.path.join('../', 'astminer', 'cli.sh')
+    cli_path = '/home/noah/COMP550/astminer/cli.sh'
+    # cli_path = os.path.join(cli_path, '/cli.sh')
 
     # if not os.path.isfile(cli_path):
-    #     raise FileNotFoundError(f"The file {cli_path} was not found.")
+    #     raise FileNotFoundError(f"The file {cli_path} was not found."
     
-    # original_dir = "../550Final-project/code/"
-    # astminer_path = '../astminer' 
-    # config_path = '../550Final-project/configs/astTree.yaml'
+    original_dir = "../550Final-project/code/"
+    astminer_path = '/home/noah/COMP550/astminer/' 
+    config_path = '../550Final-project/configs/astTree.yaml'
 
-    # # Use astminer to create path contexts
-    # call_astminer(original_dir, astminer_path, config_path)
+    # Use astminer to create path contexts
+    call_astminer(original_dir, astminer_path, config_path)
 
-    # # Do something to get the path contexts
-    # path_contexts = None
+    c2s_file_path = "/home/noah/COMP550/550Final-project/temp_output/py/data/path_contexts.c2s"
 
-    # # delete the file
-    # os.remove(temp_filename)
-    # os.remove(output_file)
+    # Do something to get the path contexts
+    #cpath_contexts = read_path_contexts(c2s_file_path)
 
-    # what to do with the function labels: keep 1, keep all??
+    token_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/tokens.csv')
+    node_type_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/node_types.csv')
+    path_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/paths.csv')
+
+    # processed_path_contexts = process_path_contexts(c2s_file_path, token_mapping, path_mapping)
+    processed_data = read_and_process_c2s(c2s_file_path, token_mapping, path_mapping, node_type_mapping)
+    if(processed_data == None):
+        os.remove(temp_filename)
+        shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
+        return
+
+    # Save to a new file (optional)
+    with open('/home/noah/COMP550/550Final-project/temp_output/processed_path_contexts.csv', 'a+', newline='') as output_file:
+        writer = csv.writer(output_file)
+        writer.writerow(processed_data)
+
+    # delete the file
+    os.remove(temp_filename)
+    # breakpoint()
+    shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
+    # breakpoint()
 
     return {
         # 'original_code': code_without_comments.strip(),
         'cleaned_code': cleaned_code,
         # 'original_tree': serializable_original_tree,
-        # 'cleaned_tree': serializable_cleaned_tree,
-        'description': comments.strip() if comments else None,
-        # 'path_contexts': path_contexts
+        'cleaned_tree': serializable_cleaned_tree,
+        'description': comments.strip(),
+        'path_contexts': processed_data
     }
+
+def load_mappings_to_dataframe(file_path):
+    return pd.read_csv(file_path, header=0, index_col=0).to_dict(orient='index')
+
+def read_and_process_c2s(file_path, token_mapping, path_mapping, node_type_mapping):
+    processed_data = []
+
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return
+
+    with open(file_path, 'r') as file:
+        for line in file:
+            processed_line = process_path_context(line, token_mapping, path_mapping, node_type_mapping)
+            processed_data.append(processed_line)
+
+    return processed_data
+
+def remove_chinese_characters(text):
+    # Regular expression for matching Chinese characters
+    chinese_char_pattern = r'[\u4e00-\u9fff]'
+
+    # Replace Chinese characters with an empty string
+    cleaned_text = re.sub(chinese_char_pattern, '', text)
+
+    return cleaned_text
+
+def process_path_context(line, token_mapping, path_mapping, node_type_mapping):
+    label, *path_contexts = line.strip().split()
+    processed_line = [label]
+
+    for context in path_contexts:
+        path_nodes = []
+        parts = context.split(',')
+        if len(parts) != 3:
+            print(f"Invalid format in context: {context}")
+            continue 
+
+        start_token_id, path_id, end_token_id = parts
+
+        path_nodes_info = path_mapping.get(int(path_id))
+        if path_nodes_info is None:
+            path_nodes = [{'Unknown': 'Unknown'}]
+        else:
+            if isinstance(path_nodes_info, dict):
+                path_nodes_ids = []
+                for value in path_nodes_info.values():
+                    path_nodes_ids.extend(value.split())
+            else:
+                path_nodes_ids = path_nodes_info.split()
+
+            for node_id in path_nodes_ids:
+                node_type = node_type_mapping.get(int(node_id), 'Unknown')
+                path_nodes.append({int(node_id): node_type['node_type']})
+
+        path_nodes.insert(0,int(start_token_id))
+        path_nodes.append(int(end_token_id))
+
+        processed_line.append(path_nodes)
+
+    return processed_line
 
 def id_generator(size=10, chars=string.ascii_uppercase + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
@@ -242,7 +328,6 @@ def create_dataset_for_testing():
     processed_data = []
 
     for code in dataset['train']:
-        # print(code)
         processed_item = process_dataset_item(code)
         if processed_item:
             processed_data.append(processed_item)
