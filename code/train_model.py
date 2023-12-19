@@ -1,3 +1,4 @@
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -122,6 +123,10 @@ def calculate_metrics(preds, labels):
     f1 = f1_score(labels, preds, average='weighted')
     return accuracy, precision, f1
 
+# load dataset:
+df = pd.read_csv('processed_context_paths.csv')
+function_paths = df['CP'].tolist()
+function_names = df['Label'].tolist()
 
 # dataset tokenizing and loading
 vocab = Vocabulary(special_tokens=['<PAD>', '<UNK>'])
