@@ -10,13 +10,16 @@ from ast import literal_eval
 import matplotlib.pyplot as plt
 
 
+
 # encoder model
 class TransformerEncoder(nn.Module):
     def __init__(self, input_dim, embed_dim, num_heads, num_layers, output_dim):
         super(TransformerEncoder, self).__init__()
         self.embedding = nn.Embedding(input_dim, embed_dim)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=embed_dim, nhead=num_heads)
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=embed_dim, nhead=num_heads)
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer, num_layers=num_layers)
         self.fc = nn.Linear(embed_dim, output_dim)
 
     def forward(self, src):
@@ -24,13 +27,16 @@ class TransformerEncoder(nn.Module):
         encoded = self.transformer_encoder(embedded)
         return self.fc(encoded.mean(dim=1))
 
+
 # decoder model
 class TransformerDecoder(nn.Module):
     def __init__(self, input_dim, embed_dim, num_heads, num_layers, output_dim):
         super(TransformerDecoder, self).__init__()
         self.embedding = nn.Embedding(input_dim, embed_dim)
-        decoder_layer = nn.TransformerDecoderLayer(d_model=embed_dim, nhead=num_heads)
-        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=num_layers)
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=embed_dim, nhead=num_heads)
+        self.transformer_decoder = nn.TransformerDecoder(
+            decoder_layer, num_layers=num_layers)
         self.fc = nn.Linear(embed_dim, output_dim)
 
     def forward(self, src, memory):
@@ -38,12 +44,14 @@ class TransformerDecoder(nn.Module):
         decoded = self.transformer_decoder(embedded, memory)
         return self.fc(decoded)
 
+
 class Vocabulary:
     def __init__(self, special_tokens=None):
         self.itos = {}  # integer-to-string mapping
         self.stoi = {}  # string-to-integer mapping
 
-        self.special_tokens = special_tokens if special_tokens else ['<PAD>', '<UNK>']
+        self.special_tokens = special_tokens if special_tokens else [
+            '<PAD>', '<UNK>']
 
         for i, token in enumerate(self.special_tokens):
             self.itos[i] = token
@@ -63,7 +71,8 @@ class Vocabulary:
 
     def decode(self, index_list):
         return [self.itos[index] for index in index_list]
-    
+
+
 class LabelEncoder:
     def __init__(self):
         self.label_to_index = {}
@@ -97,8 +106,10 @@ class CodeDataset(Dataset):
     def __getitem__(self, idx):
         max_length = 1024
         function_path_sequence = self.encoded_function_paths[idx][:max_length]
-        padded_sequence = function_path_sequence + [self.vocab.stoi['<PAD>']] * (max_length - len(function_path_sequence))
-        
+        padded_sequence = function_path_sequence + \
+            [self.vocab.stoi['<PAD>']] * \
+            (max_length - len(function_path_sequence))
+
         function_name_index = self.function_name_indices[idx]
         return torch.tensor(padded_sequence), torch.tensor(function_name_index)
 
@@ -106,17 +117,20 @@ class CodeDataset(Dataset):
 def tokenize_and_encode_paths(paths_list, vocab):
     """
     Tokenizes and encodes a list of paths for each function.
-    Each path is a list of elements. 
+    Each path is a list of elements.
     """
     encoded_paths = []
     for paths in paths_list:
         encoded_function_paths = []
+
         for path in paths:
             for element in path:
                 vocab.add_token(element)
                 encoded_function_paths.append(vocab.stoi[element])
+
         encoded_paths.append(encoded_function_paths)
     return encoded_paths
+
 
 def calculate_metrics(preds, labels):
     preds = np.argmax(preds, axis=1)
@@ -124,6 +138,7 @@ def calculate_metrics(preds, labels):
     precision = precision_score(labels, preds, average='weighted')
     f1 = f1_score(labels, preds, average='weighted')
     return accuracy, precision, f1
+
 
 # load dataset:
 df = pd.read_csv('processed_context_paths.csv')
@@ -155,7 +170,8 @@ encoded_function_paths = tokenize_and_encode_paths(function_paths, vocab)
 label_encoder = LabelEncoder()
 for name in function_names:
     label_encoder.add_label(name)
-encoded_function_names = [label_encoder.encode(name) for name in function_names]
+encoded_function_names = [label_encoder.encode(
+    name) for name in function_names]
 
 dataset = CodeDataset(encoded_function_paths, encoded_function_names, vocab)
 
@@ -175,8 +191,10 @@ output_dim = len(label_encoder)   # Output dimension (size of the function names
 num_epochs = 20
 
 # Initialize models
-encoder = TransformerEncoder(input_dim, embed_dim, num_heads, num_layers, embed_dim)
-decoder = TransformerDecoder(input_dim, embed_dim, num_heads, num_layers, output_dim)
+encoder = TransformerEncoder(
+    input_dim, embed_dim, num_heads, num_layers, embed_dim)
+decoder = TransformerDecoder(
+    input_dim, embed_dim, num_heads, num_layers, output_dim)
 
 # Loss and Optimizer
 criterion = nn.CrossEntropyLoss()
@@ -220,7 +238,7 @@ with torch.no_grad():
     for paths, function_names in test_loader:
         encoder_output = encoder(paths)
         decoder_output = decoder(function_names, encoder_output)
-        
+
         all_preds.extend(decoder_output.cpu().numpy())
         all_labels.extend(function_names.cpu().numpy())
 
