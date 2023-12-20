@@ -15,6 +15,7 @@ import pandas as pd
 from pathlib import Path
 import shutil
 import csv
+from tqdm import tqdm
 
 
 class CodeCleaner(ast.NodeTransformer):
@@ -53,11 +54,11 @@ class CodeCleaner(ast.NodeTransformer):
         original_node.name = original_name
 
         # Rename the function for further AST processing and mapping
-        if node.name not in self.builtin_names:
-            node.name = f'func{self.func_counter}'
-            self.func_counter += 1
-            self.name_mapping[original_name] = node.name
-            self.func_name_mapping[original_name] = node.name
+        # if node.name not in self.builtin_names:
+        #     node.name = f'func{self.func_counter}'
+        #     self.func_counter += 1
+        #     self.name_mapping[original_name] = node.name
+        #     self.func_name_mapping[original_name] = node.name
 
         self.function_defs.append(node)
 
@@ -162,55 +163,58 @@ def process_dataset_item(code):
     path_contexts_set = []
 
     for function, func_name in function_set:
-        temp_filename = os.path.join('/home/noah/COMP550/550Final-project/temp_input', code['path'].split('/')[-1])
-        
-        with open(temp_filename, "w") as tf:
-            tf.write(function)
+        if(len(function) > 500):
+            continue
+        else:
+            temp_filename = os.path.join('/home/noah/COMP550/550Final-project/temp_input', code['path'].split('/')[-1])
+            
+            with open(temp_filename, "w") as tf:
+                tf.write(function)
 
-        temp_output_dir = os.path.abspath("temp_output")
-        output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
-        
+            temp_output_dir = os.path.abspath("temp_output")
+            output_file = os.path.join(temp_output_dir, code['path'].split('/')[-1])
+            
 
-        cli_path = '/home/noah/COMP550/astminer/cli.sh'
-        # cli_path = os.path.join(cli_path, '/cli.sh')
+            cli_path = '/home/noah/COMP550/astminer/cli.sh'
+            # cli_path = os.path.join(cli_path, '/cli.sh')
 
-        # if not os.path.isfile(cli_path):
-        #     raise FileNotFoundError(f"The file {cli_path} was not found."
-        
-        original_dir = "../550Final-project/code/"
-        astminer_path = '/home/noah/COMP550/astminer/' 
-        config_path = '../550Final-project/configs/astTree.yaml'
+            # if not os.path.isfile(cli_path):
+            #     raise FileNotFoundError(f"The file {cli_path} was not found."
+            
+            original_dir = "../550Final-project/code/"
+            astminer_path = '/home/noah/COMP550/astminer/' 
+            config_path = '../550Final-project/configs/astTree.yaml'
 
-        # Use astminer to create path contexts
-        call_astminer(original_dir, astminer_path, config_path)
+            # Use astminer to create path contexts
+            call_astminer(original_dir, astminer_path, config_path)
 
-        c2s_file_path = "/home/noah/COMP550/550Final-project/temp_output/py/data/path_contexts.c2s"
+            c2s_file_path = "/home/noah/COMP550/550Final-project/temp_output/py/data/path_contexts.c2s"
 
-        # Do something to get the path contexts
-        #cpath_contexts = read_path_contexts(c2s_file_path)
+            # Do something to get the path contexts
+            #cpath_contexts = read_path_contexts(c2s_file_path)
 
-        token_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/tokens.csv')
-        node_type_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/node_types.csv')
-        path_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/paths.csv')
+            token_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/tokens.csv')
+            node_type_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/node_types.csv')
+            path_mapping = load_mappings_to_dataframe('/home/noah/COMP550/550Final-project/temp_output/py/paths.csv')
 
-        # processed_path_contexts = process_path_contexts(c2s_file_path, token_mapping, path_mapping)
-        processed_data = read_and_process_c2s(c2s_file_path, token_mapping, path_mapping, node_type_mapping)
-        if(processed_data == None):
+            # processed_path_contexts = process_path_contexts(c2s_file_path, token_mapping, path_mapping)
+            processed_data = read_and_process_c2s(c2s_file_path, token_mapping, path_mapping, node_type_mapping)
+            if(processed_data == None):
+                os.remove(temp_filename)
+                shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
+                return
+
+            # Save to a new file (optional)
+            # with open('/home/noah/COMP550/550Final-project/temp_output/processed_path_contexts.csv', 'a+', newline='') as output_file:
+            #     writer = csv.writer(output_file)
+            #     writer.writerow(processed_data)
+            # breakpoint()
+
+            # delete the file
             os.remove(temp_filename)
             shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
-            return
-
-        # Save to a new file (optional)
-        # with open('/home/noah/COMP550/550Final-project/temp_output/processed_path_contexts.csv', 'a+', newline='') as output_file:
-        #     writer = csv.writer(output_file)
-        #     writer.writerow(processed_data)
-        # breakpoint()
-
-        # delete the file
-        os.remove(temp_filename)
-        shutil.rmtree('/home/noah/COMP550/550Final-project/temp_output/py')
-
-        path_contexts_set.append((processed_data, func_name))
+            
+            path_contexts_set.append((processed_data, func_name))
 
     return {
         # 'original_code': code_without_comments.strip(),
@@ -257,7 +261,13 @@ def process_path_context(line, token_mapping, path_mapping, node_type_mapping):
             print(f"Invalid format in context: {context}")
             continue 
 
-        start_token_id, path_id, end_token_id = parts
+        start_token_id, path_id, end_token_id = map(int, parts)
+
+        # Retrieve the tokens for start and end token IDs
+        start_token = token_mapping.get(start_token_id, 'Unknown')
+        start_token = list(start_token.values())[0]
+        end_token = token_mapping.get(end_token_id, 'Unknown')
+        end_token = list(end_token.values())[0]
 
         path_nodes_info = path_mapping.get(int(path_id))
         if path_nodes_info is None:
@@ -272,10 +282,10 @@ def process_path_context(line, token_mapping, path_mapping, node_type_mapping):
 
             for node_id in path_nodes_ids:
                 node_type = node_type_mapping.get(int(node_id), 'Unknown')
-                path_nodes.append({int(node_id): node_type['node_type']})
+                path_nodes.append(list(node_type.values())[0])
 
-        path_nodes.insert(0,int(start_token_id))
-        path_nodes.append(int(end_token_id))
+        path_nodes.insert(0,start_token)
+        path_nodes.append(end_token)
 
         processed_line.append(path_nodes)
 
@@ -324,11 +334,16 @@ def create_dataset():
 def create_dataset_for_testing():
     dataset = load_dataset("bigcode/the-stack-smol", data_dir="data/python")
     processed_data = []
+    counter = 0
 
-    for code in dataset['train']:
+    for code in tqdm(dataset['train']):
         processed_item = process_dataset_item(code)
         if processed_item:
-            processed_data.extend(processed_item)
+            processed_data.extend(processed_item['path_contexts'])
+            counter += 1
+            print(counter)
+        if(counter > 1500):
+            break
 
     df = pd.DataFrame(processed_data, columns=['CP', 'Label'])
     df.to_csv('processed_context_paths.csv', index=False)
