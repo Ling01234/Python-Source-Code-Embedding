@@ -6,9 +6,11 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import random_split
 from sklearn.metrics import accuracy_score, precision_score, f1_score
 import numpy as np
+from ast import literal_eval
+import matplotlib.pyplot as plt
 
 
-# Transformer Encoder Model
+# encoder model
 class TransformerEncoder(nn.Module):
     def __init__(self, input_dim, embed_dim, num_heads, num_layers, output_dim):
         super(TransformerEncoder, self).__init__()
@@ -22,7 +24,7 @@ class TransformerEncoder(nn.Module):
         encoded = self.transformer_encoder(embedded)
         return self.fc(encoded.mean(dim=1))
 
-# Transformer Decoder Model
+# decoder model
 class TransformerDecoder(nn.Module):
     def __init__(self, input_dim, embed_dim, num_heads, num_layers, output_dim):
         super(TransformerDecoder, self).__init__()
@@ -34,7 +36,7 @@ class TransformerDecoder(nn.Module):
     def forward(self, src, memory):
         embedded = self.embedding(src)
         decoded = self.transformer_decoder(embedded, memory)
-        return self.fc(decoded.mean(dim=1))
+        return self.fc(decoded)
 
 class Vocabulary:
     def __init__(self, special_tokens=None):
@@ -93,7 +95,7 @@ class CodeDataset(Dataset):
         return len(self.encoded_function_paths)
 
     def __getitem__(self, idx):
-        max_length = 512
+        max_length = 1024
         function_path_sequence = self.encoded_function_paths[idx][:max_length]
         padded_sequence = function_path_sequence + [self.vocab.stoi['<PAD>']] * (max_length - len(function_path_sequence))
         
@@ -107,12 +109,12 @@ def tokenize_and_encode_paths(paths_list, vocab):
     Each path is a list of elements. 
     """
     encoded_paths = []
-    for paths in paths_list:  # Iterate over lists of paths for each function
+    for paths in paths_list:
         encoded_function_paths = []
-        for path in paths:  # Iterate over each path
-            for element in path.split('/'):  # Tokenize each element in the path
-                vocab.add_token(element)  # Add element to vocabulary
-                encoded_function_paths.append(vocab.stoi[element])  # Encode the element
+        for path in paths:
+            for element in path:
+                vocab.add_token(element)
+                encoded_function_paths.append(vocab.stoi[element])
         encoded_paths.append(encoded_function_paths)
     return encoded_paths
 
@@ -125,6 +127,24 @@ def calculate_metrics(preds, labels):
 
 # load dataset:
 df = pd.read_csv('processed_context_paths.csv')
+# processed_df = pd.DataFrame(columns=df.columns)
+
+processed_rows = []
+
+for index, row in df.iterrows():
+    try:
+        cp = literal_eval(row['CP'])
+        row['CP'] = cp[0][1:] 
+
+        processed_rows.append(row)
+    except Exception as e:
+        print(f"Error processing row {index}: {e}")
+        continue
+
+# Concatenate the list of processed rows into a new DataFrame
+processed_df = pd.concat(processed_rows, axis=1).transpose()
+
+
 function_paths = df['CP'].tolist()
 function_names = df['Label'].tolist()
 
@@ -147,12 +167,12 @@ train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
 # Model Hyperparameters
-input_dim = 10000  # Size of your vocabulary
-embed_dim = 128    # Size of each embedding vector
+input_dim = len(vocab)
+embed_dim = 128
 num_heads = 4      # Number of heads in the multiheadattention models
 num_layers = 2     # Number of sub-encoder-layers in the encoder
-output_dim = 100   # Output dimension (size of the function names vocabulary)
-num_epochs = 10
+output_dim = len(label_encoder)   # Output dimension (size of the function names vocabulary)
+num_epochs = 20
 
 # Initialize models
 encoder = TransformerEncoder(input_dim, embed_dim, num_heads, num_layers, embed_dim)
@@ -163,8 +183,11 @@ criterion = nn.CrossEntropyLoss()
 encoder_optimizer = optim.Adam(encoder.parameters(), lr=0.001)
 decoder_optimizer = optim.Adam(decoder.parameters(), lr=0.001)
 
+loss_data = []
 # Training Loop
 for epoch in range(num_epochs):
+    total_loss = 0
+    num_batches = 0
     for paths, function_names in train_loader:
         encoder_optimizer.zero_grad()
         decoder_optimizer.zero_grad()
@@ -180,8 +203,12 @@ for epoch in range(num_epochs):
         loss.backward()
         encoder_optimizer.step()
         decoder_optimizer.step()
+        total_loss += loss.item()
+        num_batches += 1
 
-        print(f"Epoch {epoch}, Loss: {loss.item()}")
+    avg_loss = total_loss / num_batches
+    loss_data.append(avg_loss)
+    print(f"Epoch {epoch}, Average Loss: {avg_loss}")
 
 encoder.eval()
 decoder.eval()
@@ -198,3 +225,12 @@ with torch.no_grad():
         all_labels.extend(function_names.cpu().numpy())
 
 accuracy, precision, f1 = calculate_metrics(all_preds, all_labels)
+
+# display a chart
+plt.figure(figsize=(10, 6))
+plt.plot(loss_data, label='Training Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.title('Training Loss Over Epochs')
+plt.legend()
+plt.show()
